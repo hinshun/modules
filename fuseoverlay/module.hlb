@@ -1,0 +1,58 @@
+import fuse "./fuse.hlb"
+
+export upperdir
+export modified
+
+# Returns the upperdir of an overlayfs after running a command on a base image.
+#
+# @param lowerdir the base image for the chroot.
+# @param command the command to run in the chroot.
+fs upperdir(fs lowerdir, string command) {
+	scratch
+	copy fs {
+		modified lowerdir command
+	} "/upperdir" "/" with contentsOnly
+}
+
+# Executes a command in a chroot of a directory managed by overlayfs.
+#
+# @param lowerdir the base image for the chroot.
+# @param command the command to run in the chroot.
+# @return a leftover filesystem. do not use.
+fs chroot(fs lowerdir, string command) {
+	image "ubuntu:xenial"
+	run <<~APK
+		apt-get update &&
+		apt-get --no-install-recommends install -y
+			fakechroot
+	APK
+	mkdir "/mnt/merged" 0o775
+	run string {
+		format <<~CHROOT
+	                /in/fuse-overlayfs -o auto_unmount -o lowerdir=/mnt/lowerdir,upperdir=/out/upperdir,workdir=/out/workdir /mnt/merged &&
+			fakechroot chroot /mnt/merged sh -c "%s"
+		CHROOT command
+	} with option {
+		mount fuse.overlayfs "/in" with readonly
+		mount lowerdir "/mnt/lowerdir" with readonly
+
+		# We need to run privileged mode until we can get a `/dev/fuse` security
+		# profile from BuildKit.
+		security "insecure"
+
+		# `chage` is a tool to change user password expiry information so it doesn't
+		# seem important to capture the effects of.
+		env "FAKECHROOT_CMD_SUBST" "/usr/bin/chage=/bin/true"
+
+		# The upperdir and workdir of the overlayfs.
+		#
+		# They need to be mounted together because overlayfs uses workdir as a
+		# a temporary directory before atomically moving the files into upperdir.
+		# It will error if upperdir and workdir are in different filesystems.
+		mount fs {
+			scratch 
+			mkdir "/upperdir" 0o775
+			mkdir "/workdir" 0o775
+		} "/out" as modified
+	}
+}

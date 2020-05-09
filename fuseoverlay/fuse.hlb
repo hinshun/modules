@@ -1,0 +1,39 @@
+export overlayfs
+
+# Compiles fuse-overlayfs and puts the static binary in a mount.
+#
+# @return a leftover system from build. do not use.
+fs buildFuseOverlayfs() {
+	image "debian:10"
+	run <<~APT
+		apt-get update && apt-get install --no-install-recommends -y
+			ca-certificates
+			libc6-dev
+			gcc
+			make
+			automake
+			autoconf
+			pkgconf
+			libfuse3-dev
+			file
+	APT
+        run <<-BUILD
+		./autogen.sh && \
+		LIBS="-ldl" LDFLAGS="-static" ./configure && \
+		make && \
+		cp fuse-overlayfs /out && \
+		file /out/fuse-overlayfs | grep "statically linked"
+	BUILD with option {
+		dir "/fuse-overlayfs"
+		mount source "/fuse-overlayfs"
+
+		# A filesystem containing a statically linked fuse-overlayfs binary.
+		#
+		# @return a filesystem with a binary named `fuse-overlayfs`.
+		mount scratch "/out" as overlayfs
+	}
+}
+
+fs source() {
+	git "https://github.com/containers/fuse-overlayfs" "v0.7.6"
+}

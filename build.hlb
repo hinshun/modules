@@ -1,5 +1,5 @@
 group default() {
-	parallel docker npm go
+	parallel docker npm go node yarn fuseoverlay
 }
 
 fs docker() {
@@ -25,6 +25,11 @@ fs node() {
 fs yarn() {
 	lib "./yarn"
 	dockerPush "openllb/yarn.hlb"
+}
+
+fs fuseoverlay() {
+	lib "./fuseoverlay"
+	dockerPush "openllb/fuseoverlay.hlb"
 }
 
 fs lib(string dir) {
